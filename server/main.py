@@ -2,7 +2,6 @@ from fastapi import FastAPI, File, UploadFile, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRouter
 from duke import dcmread_image
-from pydantic import BaseModel
 
 app = FastAPI()
 api = APIRouter(prefix="/api/v1")
@@ -16,7 +15,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @api.post("/detect", status.HTTP_201_CREATED)
 async def detect(file: UploadFile = File(...), ):
     if not file.filename.lower().endswith(".dcm"):
@@ -26,6 +24,7 @@ async def detect(file: UploadFile = File(...), ):
         )
     try:
         images = dcmread_image(file.file)
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

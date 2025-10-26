@@ -1,1 +1,5 @@
 fastapi==0.120.0
+numpy==2.3.4
+pandas==2.3.3
+pydicom==3.0.1
+scikit-image==0.25.2
