@@ -15,8 +15,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-class Item(BaseModel):
-    file: File
 
 
 @api.post("/detect", status.HTTP_201_CREATED)
