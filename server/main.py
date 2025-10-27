@@ -17,7 +17,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+print(
+    "WARNING: THIS MODEL IS FOR RESEARCH PURPOSES ONLY. "
+    "DO NOT USE THIS FOR CLINICAL DIAGNOSIS OR COMMERCIAL PURPOSES. "
+    "THE AUTHORS ARE NOT RESPONSIBLE FOR ANY HARM OR LOSSES CAUSED BY THIS MODEL."
+)
 
 def extract_laterality_from_sequences(ds):
     """Extract laterality from sequences if available (e.g., tomosynthesis)"""
@@ -130,7 +134,25 @@ def gray_scale(ds):
         gray_image = cv2.cvtColor(norm_frame, cv2.COLOR_BGR2GRAY)
         process_frames.append(gray_image)
     return process_frames
-def inf_yolo()
+"""
+AGAIN! THIS MODEL IS FOR RESEARCH PURPOSE ONLY.
+DO NOT USE THIS FOR CLINICAL DIAGNOSE OR COMMERICAL PURPOSE.
+WE DO NOT HELD RESPONSIBLE FOR ANY HARM THAT MAY CAUSE BY THIS MODEL.
+"""
+def inf_yolo(frame):
+    result = MODEL(frame)
+    detection = []
+    for r in result:
+        for box in r.boxes.xyxy:
+            detection.append(box.tolist())
+    return detection
+
+def draw_box(frame, detections, color=(0, 255, 0), thickness=2):
+    frame_copy = frame.copy()
+    for box in detections:
+        x1, y1, x2, y2 = map(int, box)
+        cv2.rectangle(frame_copy, (x1, y1), (x2, y2), color, thickness)
+    return frame_copy
 @api.post("/detect")
 async def detect(file: UploadFile = File(...), ):
     if not file.filename.lower().endswith(".dcm"):
