@@ -3,6 +3,7 @@ import ContentItem from './components/ContentItem.vue';
 import { ref } from 'vue'
 
 const selectedFile = ref<File | null>(null)
+// const selectView = ref<string>()
 const errorMessage = ref('')
 
 function handleFileSelect(event: Event) {
@@ -40,7 +41,21 @@ function handleDragOver(event: DragEvent) {
   event.preventDefault()
 }
 const source: never[] = [];
+async function POST(route: string, body: BodyInit) {
+  await fetch(route, {
+    method: "POST",
+    body: body
+  })
+}
+function submitForm(event: Event) {
+  event.preventDefault()
+  const formData = new FormData()
+  formData.append("file", selectedFile.value as File)
+  POST("http://localhost:8000/api/v1/detect", formData).then((res) => console.log(res))
 
+
+
+}
 </script>
 
 <template>
@@ -108,7 +123,7 @@ const source: never[] = [];
         <ContentItem />
       </div>
       <div v-else class="flex justify-center items-center min-w-full min-h-[70vh]">
-        <form class="w-[70%] h-full" @submit.prevent="console.log(selectedFile)">
+        <form @submit.prevent="submitForm" enctype="multipart/form-data" class="w-[70%] h-full">
           <div class="rounded-4xl border-gray-600 border-2">
             <div class="border-b border-b-gray-400 px-7 py-4 flex gap-2">
               <div class="border-2 border-gray-300 rounded-full flex justify-center items-center w-16 h-16">
@@ -165,8 +180,7 @@ const source: never[] = [];
           </div>
 
           <div class="flex justify-center">
-            <button
-
+            <button type="submit"
               class="bg-[#4664AD] disabled:bg-[#707fab] text-white mt-4 font-semibold border border-transparent ease-in hover:bg-[#0F1B43] transition rounded-xl px-5 py-3"
               :disabled="!selectedFile">
               SUBMIT

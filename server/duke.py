@@ -13,7 +13,7 @@ def dcmread_image(
     index: Optional[np.uint] = None,
 ) -> np.ndarray:
     """Read pixel array from DBT DICOM file"""
-    ds = dicom.dcmread(fp)
+    ds = fp
     ds.decompress(handler_name="pylibjpeg")
     pixel_array = ds.pixel_array
     view_laterality = view[0].upper()
