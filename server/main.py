@@ -9,7 +9,7 @@ import cv2
 app = FastAPI()
 api = APIRouter(prefix="/api/v1")
 origins = ["http://localhost:5173"]
-MODEL = YOLO()
+MODEL = YOLO("./model/best.pt")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
