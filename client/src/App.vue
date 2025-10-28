@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import ContentItem from './components/ContentItem.vue';
 import { ref } from 'vue'
-
+const currentImage = ref<string>('') 
+const isStreaming = ref(false)
 const selectedFile = ref<File | null>(null)
 // const selectView = ref<string>()
 const errorMessage = ref('')
@@ -41,20 +42,50 @@ function handleDragOver(event: DragEvent) {
   event.preventDefault()
 }
 const source: never[] = [];
-async function POST(route: string, body: BodyInit) {
-  await fetch(route, {
-    method: "POST",
-    body: body
-  })
-}
-function submitForm(event: Event) {
-  event.preventDefault()
+async function submitForm(e: Event) {
+  e.preventDefault()
+  if (!selectedFile.value) return
+  isStreaming.value = true
   const formData = new FormData()
-  formData.append("file", selectedFile.value as File)
-  POST("http://localhost:8000/api/v1/detect", formData).then((res) => console.log(res))
+  formData.append("file", selectedFile.value)
 
+  const response = await fetch("http://localhost:8000/detect", {
+    method: "POST",
+    body: formData,
+  })
 
+  if (!response.body) {
+    errorMessage.value = "No response stream."
+    return
+  }
 
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+
+  let buffer = ''
+  async function readChunk() {
+    const { done, value } = await reader.read()
+    if (done) {
+      isStreaming.value = false
+      return
+    }
+
+    buffer += decoder.decode(value, { stream: true })
+
+    // process full JSON lines (newline-delimited)
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (!line.trim()) continue
+      const data = JSON.parse(line)
+      currentImage.value = `data:image/jpeg;base64,${data.image}`
+    }
+
+    await readChunk() // keep reading
+  }
+
+  await readChunk()
 }
 </script>
 
@@ -187,6 +218,12 @@ function submitForm(event: Event) {
             </button>
           </div>
         </form>
+            <div v-if="currentImage" class="mt-5 border p-2 rounded-lg bg-gray-100 shadow-md">
+      <img :src="currentImage" class="max-h-[600px]" />
+    </div>
+
+    <div v-if="isStreaming" class="text-gray-500 mt-2">Streaming frames...</div>
+
 
       </div>
     </div>
