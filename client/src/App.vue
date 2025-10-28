@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ContentItem from './components/ContentItem.vue';
 import { ref } from 'vue'
-const currentImage = ref<string>('') 
+const currentImage = ref<string>('')
 const isStreaming = ref(false)
 const selectedFile = ref<File | null>(null)
 // const selectView = ref<string>()
@@ -49,7 +49,7 @@ async function submitForm(e: Event) {
   const formData = new FormData()
   formData.append("file", selectedFile.value)
 
-  const response = await fetch("http://localhost:8000/detect", {
+  const response = await fetch("http://localhost:8000/api/v1/detect", {
     method: "POST",
     body: formData,
   })
@@ -79,7 +79,7 @@ async function submitForm(e: Event) {
     for (const line of lines) {
       if (!line.trim()) continue
       const data = JSON.parse(line)
-      currentImage.value = `data:image/jpeg;base64,${data.image}`
+      currentImage.value = `data:image/png;base64,${data.image}`
     }
 
     await readChunk() // keep reading
@@ -218,14 +218,15 @@ async function submitForm(e: Event) {
             </button>
           </div>
         </form>
-            <div v-if="currentImage" class="mt-5 border p-2 rounded-lg bg-gray-100 shadow-md">
-      <img :src="currentImage" class="max-h-[600px]" />
-    </div>
-
-    <div v-if="isStreaming" class="text-gray-500 mt-2">Streaming frames...</div>
 
 
       </div>
+      <div v-if="currentImage" class="mt-5 border p-2 rounded-lg bg-gray-100 shadow-md">
+        <img :src="currentImage" class="max-h-[600px]" />
+      </div>
+
+      <div v-if="isStreaming" class="text-gray-500 mt-2">Streaming frames...</div>
+
     </div>
   </div>
 </template>

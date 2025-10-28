@@ -150,38 +150,72 @@ WE DO NOT HELD RESPONSIBLE FOR ANY HARM THAT MAY CAUSE BY THIS MODEL.
 """
 
 
-def gray_scale(ds):
-    frames = ds.pixel_array
-    if frames.ndim == 2:
-        frames = np.expand_dims(frames, axis=0)
-    for frame in frames:
-        norm_frame = cv2.normalize(frame, None, 0, 255, cv2.NORM_MINMAX).astype(
-            np.uint8
-        )
-        # convert to gray only if not already single-channel
-        if len(norm_frame.shape) == 2:
-            gray_image = norm_frame
-        else:
-            gray_image = cv2.cvtColor(norm_frame, cv2.COLOR_BGR2GRAY)
-        yield gray_image
+def preprocess_frame(frame, imgsz=512, to_rgb=True):
+    """
+    Preprocess grayscale frame to match YOLO CLI input:
+    - Normalize to 0–1
+    - Resize / letterbox to imgsz x imgsz
+    - Convert single-channel to 3-channel if needed
+    """
+    # Convert to float32 and normalize
+    frame = frame.astype(np.float32)
+    frame /= frame.max() if frame.max() > 0 else 1.0
+
+    h, w = frame.shape
+    scale = imgsz / max(h, w)
+    nh, nw = int(h * scale), int(w * scale)
+
+    # Resize image
+    resized = cv2.resize(frame, (nw, nh), interpolation=cv2.INTER_LINEAR)
+
+    # Letterbox (pad) to imgsz x imgsz
+    top = (imgsz - nh) // 2
+    bottom = imgsz - nh - top
+    left = (imgsz - nw) // 2
+    
+    return resized, scale, left, top  # return scale and padding to map boxes back
 
 
-def inf_yolo(frame):
-    result = MODEL(frame)
-    detection = []
+def inf_yolo(frame, model, conf_thresh=0.2, iou_thresh=0.45, imgsz=512):
+    """
+    Run YOLO inference like CLI, return only bounding boxes (no labels)
+    """
+    # Preprocess
+    img, scale, pad_x, pad_y = preprocess_frame(frame, imgsz)
+
+    # Inference
+    result = model(img, conf=conf_thresh, iou=iou_thresh, imgsz=imgsz)
+
+    boxes = []
     for r in result:
         for box in r.boxes.xyxy:
-            detection.append(box.tolist())
-    return detection
+            x1, y1, x2, y2 = map(float, box.tolist())
+
+            # Map coordinates back to original frame
+            x1 = max(0, (x1 - pad_x) / scale)
+            y1 = max(0, (y1 - pad_y) / scale)
+            x2 = min(frame.shape[1], (x2 - pad_x) / scale)
+            y2 = min(frame.shape[0], (y2 - pad_y) / scale)
+
+            boxes.append([x1, y1, x2, y2])
+    return boxes
 
 
 def draw_box(frame, detections, color=(0, 255, 0), thickness=2):
-    frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+    """
+    Draw colored boxes on grayscale image.
+    """
+    # Convert grayscale to BGR for colored boxes
+    if len(frame.shape) == 2:
+        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+    else:
+        frame_bgr = frame.copy()
+
     for box in detections:
         x1, y1, x2, y2 = map(int, box)
         cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, thickness)
-    return frame_bgr
 
+    return frame_bgr
 
 # --- Streaming route ---
 
@@ -196,19 +230,20 @@ async def detect(file: UploadFile = File(...)):
 
     try:
         # Read DICOM file
-        ds = pydicom.dcmread(file.file)
+        # ds = pydicom.dcmread(file.file)
 
         # Optional: your breast view logic (if needed)
-        view = get_standard_breast_view(ds)
-        data = dcmread_image(ds, view)
+        # view = get_standard_breast_view(ds)
+        # print(view)
+        data = dcmread_image(file.file, "lcc")
 
         # Stream frames
         async def frame_generator():
-            for idx, frame in enumerate(gray_scale(data)):
+            for idx, frame in enumerate(data):
 
-                detections = inf_yolo(frame)
+                detections = inf_yolo(frame, MODEL)
                 boxed = draw_box(frame, detections)
-                _, buffer = cv2.imencode(".jpg", boxed)
+                _, buffer = cv2.imencode(".png", boxed)
                 b64 = base64.b64encode(buffer).decode("utf-8")
 
                 yield json.dumps({"index": idx, "image": b64}) + "\n"
