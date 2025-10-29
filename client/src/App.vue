@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import ContentItem from './components/ContentItem.vue';
 import { ref } from 'vue'
-const currentImage = ref<string>('')
 const isStreaming = ref(false)
+const images = ref<string[]>([]);
 const selectedFile = ref<File | null>(null)
 // const selectView = ref<string>()
 const errorMessage = ref('')
@@ -43,50 +43,58 @@ function handleDragOver(event: DragEvent) {
 }
 const source: never[] = [];
 async function submitForm(e: Event) {
-  e.preventDefault()
-  if (!selectedFile.value) return
-  isStreaming.value = true
-  const formData = new FormData()
-  formData.append("file", selectedFile.value)
+  e.preventDefault();
+  if (!selectedFile.value) return;
+
+  isStreaming.value = true;
+  images.value = []; 
+  const formData = new FormData();
+  formData.append("file", selectedFile.value);
 
   const response = await fetch("http://localhost:8000/api/v1/detect", {
     method: "POST",
     body: formData,
-  })
+  });
 
   if (!response.body) {
-    errorMessage.value = "No response stream."
-    return
+    errorMessage.value = "No response stream.";
+    isStreaming.value = false;
+    return;
   }
 
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
 
-  let buffer = ''
   async function readChunk() {
-    const { done, value } = await reader.read()
+    const { done, value } = await reader.read();
     if (done) {
-      isStreaming.value = false
-      return
+      isStreaming.value = false;
+      return;
     }
 
-    buffer += decoder.decode(value, { stream: true })
-
-    // process full JSON lines (newline-delimited)
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
 
     for (const line of lines) {
-      if (!line.trim()) continue
-      const data = JSON.parse(line)
-      currentImage.value = `data:image/png;base64,${data.image}`
+      if (!line.trim()) continue;
+      const data = JSON.parse(line);
+      const imgSrc = `data:image/png;base64,${data.image}`;
+      images.value.push(imgSrc);
     }
 
-    await readChunk() // keep reading
+    await readChunk();
   }
 
-  await readChunk()
+  await readChunk();
 }
+function clearImage() {
+  isStreaming.value = false;
+  images.value = []
+  selectedFile.value = null
+}
+
 </script>
 
 <template>
@@ -221,12 +229,18 @@ async function submitForm(e: Event) {
 
 
       </div>
-      <div v-if="currentImage" class="mt-5 border p-2 rounded-lg bg-gray-100 shadow-md">
-        <img :src="currentImage" class="max-h-[600px]" />
+      <div v-if="images.length > 0" class="mt-5 grid grid-cols-3 gap-4 p-4 bg-gray-100 rounded-lg shadow-md">
+        <div v-for="(img, idx) in images" :key="idx" class="border rounded-lg overflow-hidden bg-white">
+          <img :src="img" class="w-full h-auto object-contain" />
+        </div>
       </div>
 
-      <div v-if="isStreaming" class="text-gray-500 mt-2">Streaming frames...</div>
-
+      <div v-if="isStreaming" class="text-gray-500 mt-2 text-center">Streaming frames...</div>
+      <div class="pb-48 pt-4 flex justify-center w-full">
+        <button v-if="images.length > 0" class="font-semibold text-xl bg-blue-300 px-5 hover:cursor-pointer hover:bg-blue-800 hover:text-white transition ease-out  py-2 rounded-lg  text-center " @click="clearImage">
+          CLEAR
+        </button>
+      </div>
     </div>
   </div>
 </template>

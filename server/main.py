@@ -172,8 +172,12 @@ def preprocess_frame(frame, imgsz=512, to_rgb=True):
     top = (imgsz - nh) // 2
     bottom = imgsz - nh - top
     left = (imgsz - nw) // 2
+    frame_padded = cv2.copyMakeBorder(
+        resized, top, bottom, left, imgsz - nw - left,
+        cv2.BORDER_CONSTANT, value=0
+    )
     
-    return resized, scale, left, top  # return scale and padding to map boxes back
+    return frame_padded, scale, left, top  # return scale and padding to map boxes back
 
 
 def inf_yolo(frame, model, conf_thresh=0.2, iou_thresh=0.45, imgsz=512):
