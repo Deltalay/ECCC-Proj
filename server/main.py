@@ -8,8 +8,8 @@ from fastapi.routing import APIRouter
 from duke import dcmread_image
 import numpy as np
 from ultralytics import YOLO
-import pydicom
 import cv2
+import os
 
 app = FastAPI()
 api = APIRouter(prefix="/api/v1")
@@ -146,11 +146,6 @@ def gray_scale(ds):
     return process_frames
 
 
-"""
-AGAIN! THIS MODEL IS FOR RESEARCH PURPOSE ONLY.
-DO NOT USE THIS FOR CLINICAL DIAGNOSE OR COMMERICAL PURPOSE.
-WE DO NOT HELD RESPONSIBLE FOR ANY HARM THAT MAY CAUSE BY THIS MODEL.
-"""
 
 
 def preprocess_frame(frame, imgsz=512):
@@ -174,54 +169,60 @@ def preprocess_frame(frame, imgsz=512):
     right = imgsz - nw - left
     padded = cv2.copyMakeBorder(
         resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=0)
-
-    # Add a channel dimension → (imgsz, imgsz, 1)
     padded = padded[..., None]
     return padded, scale, left, top
 
 
-def inf_yolo(frame, model, conf_thresh=0.2, iou_thresh=0.45, imgsz=512):
-    """
-    Inference for a 1-channel YOLO11 model.
-    """
+"""
+AGAIN! THIS MODEL IS FOR RESEARCH PURPOSE ONLY.
+DO NOT USE THIS FOR CLINICAL DIAGNOSE OR COMMERICAL PURPOSE.
+WE DO NOT HELD RESPONSIBLE FOR ANY HARM THAT MAY CAUSE BY THIS MODEL.
+"""
+def inf_yolo(frame, model, conf_thresh=0.2, iou_thresh=0.45, imgsz=512, idx=0):
+
     # img, scale, pad_x, pad_y = preprocess_frame(frame, imgsz)
 
+    os.makedirs("predict", exist_ok=True)
+    
+    # Save the frame as temporary PNG
+    temp_path = os.path.join("predict", f"temp_{idx}.png")
+    cv2.imwrite(temp_path, frame)
 
-
+    # Run YOLO prediction
     result = model.predict(
-        source=frame,
+        source=temp_path,
         conf=conf_thresh,
         iou=iou_thresh,
         imgsz=imgsz,
         stream=False
     )
 
+    # Extract boxes
     boxes = []
     for r in result:
         if r.boxes is None:
             continue
         for box in r.boxes.xyxy:
             x1, y1, x2, y2 = map(float, box.tolist())
-           
             boxes.append([x1, y1, x2, y2])
+
+    # Remove temporary PNG
+    os.remove(temp_path)
+
+    print(f"[INFO] Saved temporary PNG for frame {idx} and ran YOLO inference.")
+
     return boxes
 
 
-def draw_box(frame, detections, color=(0, 255, 0), thickness=2):
-    """
-    Draw colored boxes on grayscale image.
-    """
-    # Convert grayscale to BGR for colored boxes
-    if len(frame.shape) == 2:
-        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-    else:
-        frame_bgr = frame.copy()
+def draw_box_grayscale(frame, detections, thickness=2):
+    frame_8bit = cv2.normalize(frame, None, 0, 255, 
+                               norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
+    overlay = cv2.cvtColor(frame_8bit, cv2.COLOR_GRAY2BGR)
     for box in detections:
         x1, y1, x2, y2 = map(int, box)
-        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, thickness)
-
-    return frame_bgr
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), color=(0, 255, 0), thickness=thickness)
+    return overlay
 
 # --- Streaming route ---
 
@@ -235,20 +236,15 @@ async def detect(file: UploadFile = File(...)):
         )
 
     try:
-        # Read DICOM file
-        # ds = pydicom.dcmread(file.file)
 
-        # Optional: your breast view logic (if needed)
-        # view = get_standard_breast_view(ds)
-        # print(view)
         data = dcmread_image(file.file, "lcc")
 
         # Stream frames
         async def frame_generator():
             for idx, frame in enumerate(data):
 
-                detections = inf_yolo(frame, MODEL)
-                boxed = draw_box(frame, detections)
+                detections = inf_yolo(frame=frame, model=MODEL, idx=idx)
+                boxed = draw_box_grayscale(frame, detections)
                 _, buffer = cv2.imencode(".png", boxed)
                 b64 = base64.b64encode(buffer).decode("utf-8")
 
