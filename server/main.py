@@ -15,6 +15,8 @@ app = FastAPI()
 api = APIRouter(prefix="/api/v1")
 origins = ["http://localhost:5173"]
 MODEL = YOLO("./model/best.pt")
+print("MODEL TYPE:", type(MODEL))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -120,7 +122,8 @@ def get_standard_breast_view(ds, suffix=None):
         ("R", "LM"): "RLM",
     }
 
-    view = mapping.get((laterality, view_position), f"{laterality}{view_position}")
+    view = mapping.get((laterality, view_position),
+                       f"{laterality}{view_position}")
 
     if suffix is not None:
         view = f"{view}{suffix}"
@@ -150,57 +153,56 @@ WE DO NOT HELD RESPONSIBLE FOR ANY HARM THAT MAY CAUSE BY THIS MODEL.
 """
 
 
-def preprocess_frame(frame, imgsz=512, to_rgb=True):
+def preprocess_frame(frame, imgsz=512):
     """
-    Preprocess grayscale frame to match YOLO CLI input:
-    - Normalize to 0–1
-    - Resize / letterbox to imgsz x imgsz
-    - Convert single-channel to 3-channel if needed
+    Preprocess a grayscale frame for YOLO11 1-channel model:
+      - Normalize to 0–1 float32
+      - Resize with letterbox padding to imgsz×imgsz
+      - Keep single channel only
     """
-    # Convert to float32 and normalize
     frame = frame.astype(np.float32)
     frame /= frame.max() if frame.max() > 0 else 1.0
 
     h, w = frame.shape
     scale = imgsz / max(h, w)
     nh, nw = int(h * scale), int(w * scale)
-
-    # Resize image
     resized = cv2.resize(frame, (nw, nh), interpolation=cv2.INTER_LINEAR)
 
-    # Letterbox (pad) to imgsz x imgsz
     top = (imgsz - nh) // 2
     bottom = imgsz - nh - top
     left = (imgsz - nw) // 2
-    frame_padded = cv2.copyMakeBorder(
-        resized, top, bottom, left, imgsz - nw - left,
-        cv2.BORDER_CONSTANT, value=0
-    )
-    
-    return frame_padded, scale, left, top  # return scale and padding to map boxes back
+    right = imgsz - nw - left
+    padded = cv2.copyMakeBorder(
+        resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=0)
+
+    # Add a channel dimension → (imgsz, imgsz, 1)
+    padded = padded[..., None]
+    return padded, scale, left, top
 
 
 def inf_yolo(frame, model, conf_thresh=0.2, iou_thresh=0.45, imgsz=512):
     """
-    Run YOLO inference like CLI, return only bounding boxes (no labels)
+    Inference for a 1-channel YOLO11 model.
     """
-    # Preprocess
-    img, scale, pad_x, pad_y = preprocess_frame(frame, imgsz)
+    # img, scale, pad_x, pad_y = preprocess_frame(frame, imgsz)
 
-    # Inference
-    result = model(img, conf=conf_thresh, iou=iou_thresh, imgsz=imgsz)
+
+
+    result = model.predict(
+        source=frame,
+        conf=conf_thresh,
+        iou=iou_thresh,
+        imgsz=imgsz,
+        stream=False
+    )
 
     boxes = []
     for r in result:
+        if r.boxes is None:
+            continue
         for box in r.boxes.xyxy:
             x1, y1, x2, y2 = map(float, box.tolist())
-
-            # Map coordinates back to original frame
-            x1 = max(0, (x1 - pad_x) / scale)
-            y1 = max(0, (y1 - pad_y) / scale)
-            x2 = min(frame.shape[1], (x2 - pad_x) / scale)
-            y2 = min(frame.shape[0], (y2 - pad_y) / scale)
-
+           
             boxes.append([x1, y1, x2, y2])
     return boxes
 
