@@ -1,5 +1,8 @@
-fastapi==0.120.0
+fastapi[standard]>=0.115.0
+pylibjpeg>=2.0
+pylibjpeg-openjpeg>=2.0
 numpy==2.3.4
 pandas==2.3.3
 pydicom==3.0.1
 scikit-image==0.25.2
+ultralytics>=8.0.0
